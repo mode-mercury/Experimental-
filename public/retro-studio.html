@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retro AI Music Lab</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.39/Tone.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.27/build/Midi.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.27.0/dist/magenta.min.js"></script>
+  <style>
+    body { background:#111; color:#0f0; font-family:'Press Start 2P',cursive; display:flex; justify-content:center; align-items:center; height:100vh; margin:0; }
+    #app { text-align:center; background:#222; padding:20px; border:4px solid #0f0; }
+    #tabs { margin-bottom:10px; }
+    #tabs button.active { background:#8f8; }
+    .hidden { display:none; }
+    textarea { width:100%; height:60px; margin-top:10px; font-family:inherit; }
+    button { font-family:inherit; margin:5px; padding:10px 20px; background:#0f0; color:#000; border:none; cursor:pointer; }
+    button:hover { background:#8f8; }
+    #vote { margin-top:10px; }
+    #vote button { padding:5px 10px; }
+    pre { white-space:pre-wrap; text-align:left; background:#000; padding:10px; margin-top:10px; color:#0f0; max-height:150px; overflow-y:auto; }
+    #sequencer table { border-collapse:collapse; margin:10px auto; }
+    #sequencer th,#sequencer td { border:1px solid #0f0; padding:2px; }
+    #sequencer td label { display:block; width:20px; height:20px; background:#000; cursor:pointer; }
+    #sequencer input[type="checkbox"] { display:none; }
+    #sequencer input[type="checkbox"]:checked + label { background:#0f0; }
+    #mixer { display:flex; justify-content:center; margin-top:20px; }
+    .channel { border:1px solid #0f0; padding:5px; margin:0 2px; text-align:center; }
+    .fader { writing-mode:bt-lr; -webkit-appearance:slider-vertical; width:30px; height:100px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Retro AI Music Lab</h1>
+    <div id="tabs">
+      <button id="tabSimple" class="active">Simple</button>
+      <button id="tabAdvanced">Advanced</button>
+    </div>
+
+    <section id="simpleMode">
+      <textarea id="prompt" placeholder="Describe the music..."></textarea>
+      <button id="promptGenerate">Generate</button>
+      <div id="controlsSimple" class="controls">
+        <button id="playSimple">Play</button>
+        <button id="pauseSimple">Pause</button>
+        <button id="resumeSimple">Resume</button>
+        <button id="stopSimple">Stop</button>
+      </div>
+      <div id="vote">
+        <button id="like">👍</button>
+        <button id="dislike">👎</button>
+      </div>
+    </section>
+
+    <section id="advancedMode" class="hidden">
+      <div id="upload-section">
+        <input type="file" id="midiUpload" accept=".mid,.midi" />
+        <button id="generate">Generate</button>
+      </div>
+      <pre id="status">Idle</pre>
+      <section id="sequencer"></section>
+      <div id="controlsAdvanced" class="controls">
+        <button id="play">Play</button>
+        <button id="pause">Pause</button>
+        <button id="resume">Resume</button>
+        <button id="stop">Stop</button>
+      </div>
+      <section id="mixer"></section>
+    </section>
+  </div>
+
+  <script>
+  const tabSimple=document.getElementById('tabSimple');
+  const tabAdvanced=document.getElementById('tabAdvanced');
+  const simpleMode=document.getElementById('simpleMode');
+  const advancedMode=document.getElementById('advancedMode');
+  const promptEl=document.getElementById('prompt');
+  const promptGenerate=document.getElementById('promptGenerate');
+  const statusEl=document.getElementById('status');
+  const midiUpload=document.getElementById('midiUpload');
+  const playBtn=document.getElementById('play');
+  const stopBtn=document.getElementById('stop');
+  const pauseBtn=document.getElementById('pause');
+  const resumeBtn=document.getElementById('resume');
+  const likeBtn=document.getElementById('like');
+  const dislikeBtn=document.getElementById('dislike');
+  const sequencer=document.getElementById('sequencer');
+  const mixer=document.getElementById('mixer');
+
+  let generatedPart, synth, currentSeq;
+
+  function showSimple(){simpleMode.classList.remove('hidden');advancedMode.classList.add('hidden');tabSimple.classList.add('active');tabAdvanced.classList.remove('active');}
+  function showAdvanced(){advancedMode.classList.remove('hidden');simpleMode.classList.add('hidden');tabAdvanced.classList.add('active');tabSimple.classList.remove('active');if(!sequencer.hasChildNodes()) buildSequencer();if(!mixer.hasChildNodes()) buildMixer();}
+  tabSimple.onclick=showSimple;tabAdvanced.onclick=showAdvanced;showSimple();
+
+  const steps=16;const tracks=[{name:'Kick',create:()=>new Tone.MembraneSynth({pitchDecay:0.05})},{name:'Snare',create:()=>new Tone.NoiseSynth({envelope:{attack:0.001,decay:0.2,sustain:0}})},{name:'HiHat',create:()=>new Tone.NoiseSynth({envelope:{attack:0.001,decay:0.05,sustain:0}})},{name:'OpenHat',create:()=>new Tone.NoiseSynth({envelope:{attack:0.001,decay:0.3,sustain:0}})},{name:'Tom',create:()=>new Tone.MembraneSynth({octaves:2})},{name:'Cymbal',create:()=>new Tone.MetalSynth()},{name:'FMSynth',create:()=>new Tone.FMSynth()},{name:'Granular',create:()=>new Tone.GrainPlayer('https://tonejs.github.io/audio/berklee/gong_1.mp3')}];
+  const trackObjs=tracks.map(t=>{const ch=new Tone.Channel().connect(Tone.Destination);const inst=t.create();inst.connect(ch);return{inst,channel:ch};});
+
+  function buildSequencer(){const table=document.createElement('table');let head='<tr><th></th>';for(let s=1;s<=steps;s++)head+=`<th>${s}</th>`;head+='</tr>';table.innerHTML=head;tracks.forEach((trk,i)=>{const row=document.createElement('tr');row.innerHTML=`<td>${trk.name}</td>`;for(let s=0;s<steps;s++){const id=`t${i}s${s}`;row.innerHTML+=`<td><input type="checkbox" id="${id}"><label for="${id}"></label></td>`;}table.appendChild(row);});sequencer.appendChild(table);}
+  function buildMixer(){trackObjs.slice(0,12).forEach((trk,i)=>{const div=document.createElement('div');div.className='channel';div.innerHTML=`<div>${tracks[i].name}</div><input type="range" min="-60" max="0" value="0" step="1" class="fader" />`;div.querySelector('.fader').oninput=e=>trk.channel.volume.value=e.target.value;mixer.appendChild(div);});}
+
+  function sequencerPattern(){const pattern=[];document.querySelectorAll('#sequencer tr').forEach((row,i)=>{const rowPattern=[];row.querySelectorAll('input[type="checkbox"]').forEach(cb=>rowPattern.push(cb.checked));pattern.push(rowPattern);});return pattern;}
+
+  const model=new mm.MusicRNN('https://storage.googleapis.com/magentadata/js/checkpoints/music_rnn/melody_rnn');model.initialize();
+  function log(m){statusEl.textContent+="\n"+m;statusEl.scrollTop=statusEl.scrollHeight;}
+  function loadLiked(){try{return JSON.parse(localStorage.getItem('likedSeqs')||'[]');}catch{return [];}}
+  function saveLiked(seq){const data=loadLiked();data.push(seq);localStorage.setItem('likedSeqs',JSON.stringify(data));}
+
+  async function getSequence(file){log('Loading MIDI...');const reader=new FileReader();return new Promise(res=>{reader.onload=()=>{const midi=new Midi(reader.result);res(mm.midiToSequenceProto(midi));};reader.readAsArrayBuffer(file);});}
+  async function generateSequence(ns){log('Generating...');const q=mm.sequences.quantizeNoteSequence(ns,1);const r=await model.continueSequence(q,128,1.2);return mm.sequences.unquantizeSequence(r);}
+  function seqToPart(ns){const part=new Tone.Part();ns.notes.forEach(n=>{part.add(n.startTime,{midi:n.pitch,duration:n.endTime-n.startTime,velocity:n.velocity/127});});part.loop=false;return part;}
+
+  generate.onclick=async()=>{const file=midiUpload.files[0];let primer=null;if(file) primer=await getSequence(file);const liked=loadLiked();if(!primer&&liked.length) primer=liked[Math.floor(Math.random()*liked.length)];if(!primer){log('Upload MIDI or like a track first.');return;}const seq=await generateSequence(primer);currentSeq=seq;synth=new Tone.PolySynth(Tone.Synth).toDestination();generatedPart=seqToPart(seq);generatedPart.callback=time=>{const e=generatedPart.events.shift();synth.triggerAttackRelease(Tone.Midi(e.value.midi).toFrequency(),e.value.duration,time,e.value.velocity);generatedPart.events.push(e);};log('Ready to play.');};
+
+  playBtn.onclick=()=>{if(generatedPart){Tone.Transport.start();generatedPart.start(0);log('Playing...');}};
+  stopBtn.onclick=()=>{Tone.Transport.stop();Tone.Transport.cancel();log('Stopped.');};
+  pauseBtn.onclick=()=>{Tone.Transport.pause();log('Paused.');};
+  resumeBtn.onclick=()=>{Tone.Transport.start();log('Resumed.');};
+  likeBtn.onclick=()=>{if(currentSeq){saveLiked(currentSeq);log('Track liked.');}};
+  dislikeBtn.onclick=()=>{log('Track discarded.');};
+
+  promptGenerate.onclick=async()=>{const prompt=promptEl.value.trim();if(!prompt){log('Please enter a prompt.');return;}log('Generating from prompt ...');const primer=mm.sequences.createNoteSequence();const seq=await generateSequence(primer);currentSeq=seq;synth=new Tone.PolySynth(Tone.Synth).toDestination();generatedPart=seqToPart(seq);generatedPart.callback=time=>{const e=generatedPart.events.shift();synth.triggerAttackRelease(Tone.Midi(e.value.midi).toFrequency(),e.value.duration,time,e.value.velocity);generatedPart.events.push(e);};log('Ready.');};
+
+  playSimple.onclick=playBtn.onclick;
+  pauseSimple.onclick=pauseBtn.onclick;
+  resumeSimple.onclick=resumeBtn.onclick;
+  stopSimple.onclick=stopBtn.onclick;
+  </script>
+</body>
+</html>
