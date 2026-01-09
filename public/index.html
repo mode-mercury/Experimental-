@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Retro AI Music Generator</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <h1>Retro AI Music Lab</h1>
+
+    <div id="tabs">
+      <button id="tabSimple" class="active">Simple</button>
+      <button id="tabAdvanced">Advanced</button>
+    </div>
+
+    <section id="simpleMode">
+      <textarea id="prompt" placeholder="Describe the music..."></textarea>
+      <button id="promptGenerate">Generate</button>
+
+      <div id="controlsSimple" class="controls">
+        <button id="playSimple">Play</button>
+        <button id="pauseSimple">Pause</button>
+        <button id="resumeSimple">Resume</button>
+        <button id="stopSimple">Stop</button>
+      </div>
+
+      <div id="vote">
+        <button id="like">👍</button>
+        <button id="dislike">👎</button>
+      </div>
+    </section>
+
+    <section id="advancedMode" class="hidden">
+      <div id="upload-section">
+        <input type="file" id="midiUpload" accept=".mid,.midi" />
+        <button id="generate">Generate</button>
+      </div>
+
+      <pre id="status">Idle</pre>
+
+      <section id="sequencer"></section>
+
+      <div id="controlsAdvanced" class="controls">
+        <button id="play">Play</button>
+        <button id="pause">Pause</button>
+        <button id="resume">Resume</button>
+        <button id="stop">Stop</button>
+      </div>
+
+      <section id="mixer"></section>
+    </section>
+
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.39/Tone.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.27/build/Midi.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@magenta/music@1.27.0/dist/magenta.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
